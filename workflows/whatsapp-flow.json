@@ -1,0 +1,24 @@
+{
+  "nodes": [
+    {
+      "name": "WhatsApp Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "parameters": {
+        "path": "whatsapp"
+      },
+      "position": [200, 300]
+    },
+    {
+      "name": "Send Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "https://graph.facebook.com/v18.0/PHONE_ID/messages",
+        "method": "POST",
+        "jsonParameters": true,
+        "bodyParametersJson": "={\"messaging_product\":\"whatsapp\",\"to\":\"{{$json.from}}\",\"text\":{\"body\":\"{{$json.reply}}\"}}"
+      },
+      "position": [600, 300]
+    }
+  ],
+  "connections": {}
+}
