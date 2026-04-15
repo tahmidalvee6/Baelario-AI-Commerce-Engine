@@ -1,0 +1,164 @@
+{
+  "name": "Baelario Full AI Commerce Bot",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "WA Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "parameters": {
+        "path": "whatsapp-webhook",
+        "httpMethod": "POST"
+      }
+    },
+    {
+      "id": "2",
+      "name": "Normalize",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [400, 300],
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "user_id", "value": "={{$json[\"from\"]}}" },
+            { "name": "channel", "value": "whatsapp" },
+            { "name": "message", "value": "={{$json[\"body\"]}}" },
+            { "name": "timestamp", "value": "={{$now}}" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3",
+      "name": "AI Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [600, 300],
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "jsonParameters": true,
+        "bodyParametersJson": "={\n  \"model\": \"gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are Baelario shopping assistant. Detect intent: place_order, track_order, payment, question. Reply AND return JSON like {\\\"intent\\\":\\\"place_order\\\"}.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{$json[\"message\"]}}\"\n    }\n  ]\n}"
+      }
+    },
+    {
+      "id": "4",
+      "name": "Extract Intent",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [750, 300],
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "intent",
+              "value": "={{$json[\"choices\"][0][\"message\"][\"content\"]}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5",
+      "name": "Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [900, 300],
+      "parameters": {
+        "value1": "={{$json[\"intent\"]}}",
+        "rules": [
+          { "operation": "contains", "value2": "place_order" },
+          { "operation": "contains", "value2": "track_order" },
+          { "operation": "contains", "value2": "payment" }
+        ]
+      }
+    },
+    {
+      "id": "6",
+      "name": "Save Order",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1100, 150],
+      "parameters": {
+        "operation": "append",
+        "sheetId": "YOUR_SHEET_ID",
+        "range": "Orders!A:L"
+      }
+    },
+    {
+      "id": "7",
+      "name": "Track Order",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1100, 300],
+      "parameters": {
+        "operation": "lookup",
+        "sheetId": "YOUR_SHEET_ID",
+        "range": "Orders!A:L",
+        "lookupColumn": "Order ID",
+        "lookupValue": "={{$json[\"message\"]}}"
+      }
+    },
+    {
+      "id": "8",
+      "name": "Payment Handler",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [1100, 450],
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "payment_status",
+              "value": "Paid - Pending Verification"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "9",
+      "name": "Send Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1300, 300],
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "https://graph.facebook.com/v18.0/me/messages",
+        "jsonParameters": true,
+        "bodyParametersJson": "={\n  \"recipient\": {\"id\": \"{{$json[\"user_id\"]}}\"},\n  \"message\": {\"text\": \"{{$json[\"message\"]}}\"}\n}"
+      }
+    }
+  ],
+  "connections": {
+    "WA Trigger": {
+      "main": [[{ "node": "Normalize", "type": "main", "index": 0 }]]
+    },
+    "Normalize": {
+      "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]]
+    },
+    "AI Agent": {
+      "main": [[{ "node": "Extract Intent", "type": "main", "index": 0 }]]
+    },
+    "Extract Intent": {
+      "main": [[{ "node": "Router", "type": "main", "index": 0 }]]
+    },
+    "Router": {
+      "main": [
+        [{ "node": "Save Order", "type": "main", "index": 0 }],
+        [{ "node": "Track Order", "type": "main", "index": 0 }],
+        [{ "node": "Payment Handler", "type": "main", "index": 0 }]
+      ]
+    },
+    "Save Order": {
+      "main": [[{ "node": "Send Reply", "type": "main", "index": 0 }]]
+    },
+    "Track Order": {
+      "main": [[{ "node": "Send Reply", "type": "main", "index": 0 }]]
+    },
+    "Payment Handler": {
+      "main": [[{ "node": "Send Reply", "type": "main", "index": 0 }]]
+    }
+  }
+}
