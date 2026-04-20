@@ -1,5 +1,0 @@
-- WhatsApp Cloud API
-- Facebook Messenger API
-- Instagram Messaging API
-- Google Sheets API
-- OpenAI API
