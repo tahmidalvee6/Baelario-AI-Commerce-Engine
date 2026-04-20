@@ -1,164 +1,557 @@
 {
-  "name": "Baelario Full AI Commerce Bot",
+  "name": "Baelario AI Sales Agent",
   "nodes": [
     {
-      "id": "1",
-      "name": "WA Trigger",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "facebook-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-fb-trigger",
+      "name": "Facebook Messenger Trigger",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [200, 300],
-      "parameters": {
-        "path": "whatsapp-webhook",
-        "httpMethod": "POST"
-      }
+      "position": [0, 0]
     },
     {
-      "id": "2",
-      "name": "Normalize",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 2,
-      "position": [400, 300],
       "parameters": {
-        "values": {
-          "string": [
-            { "name": "user_id", "value": "={{$json[\"from\"]}}" },
-            { "name": "channel", "value": "whatsapp" },
-            { "name": "message", "value": "={{$json[\"body\"]}}" },
-            { "name": "timestamp", "value": "={{$now}}" }
-          ]
+        "httpMethod": "POST",
+        "path": "instagram-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-ig-trigger",
+      "name": "Instagram DM Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [0, 200]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-wa-trigger",
+      "name": "WhatsApp Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [0, 400]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const body = $input.item.json.body || $input.item.json;\n\nlet channel = 'Unknown';\nlet senderId = '';\nlet messageText = '';\nlet senderName = '';\n\nif ($node['Facebook Messenger Trigger'] && $node['Facebook Messenger Trigger'].json) {\n  channel = 'Facebook';\n  const entry = body.entry?.[0];\n  const messaging = entry?.messaging?.[0];\n  senderId = messaging?.sender?.id || '';\n  messageText = messaging?.message?.text || '';\n  senderName = messaging?.sender?.name || 'Customer';\n} else if ($node['Instagram DM Trigger'] && $node['Instagram DM Trigger'].json) {\n  channel = 'Instagram';\n  const entry = body.entry?.[0];\n  const messaging = entry?.messaging?.[0];\n  senderId = messaging?.sender?.id || '';\n  messageText = messaging?.message?.text || '';\n  senderName = messaging?.sender?.name || 'Customer';\n} else if ($node['WhatsApp Trigger'] && $node['WhatsApp Trigger'].json) {\n  channel = 'WhatsApp';\n  const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];\n  senderId = message?.from || '';\n  messageText = message?.text?.body || '';\n  senderName = body.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.profile?.name || 'Customer';\n}\n\nreturn {\n  json: {\n    channel,\n    senderId,\n    messageText,\n    senderName,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "node-normalize",
+      "name": "Normalize Message Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [300, 200]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "key": "={{ 'session_' + $json.senderId }}",
+        "options": {}
+      },
+      "id": "node-get-session",
+      "name": "Get Customer Session",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [500, 200],
+      "credentials": {
+        "redis": {
+          "id": "redis-credentials",
+          "name": "Redis"
         }
       }
     },
     {
-      "id": "3",
-      "name": "AI Agent",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [600, 300],
       "parameters": {
-        "requestMethod": "POST",
-        "url": "https://api.openai.com/v1/chat/completions",
-        "jsonParameters": true,
-        "bodyParametersJson": "={\n  \"model\": \"gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are Baelario shopping assistant. Detect intent: place_order, track_order, payment, question. Reply AND return JSON like {\\\"intent\\\":\\\"place_order\\\"}.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{$json[\"message\"]}}\"\n    }\n  ]\n}"
+        "resource": "chat",
+        "operation": "complete",
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "═══════════════════════════════════════\nIDENTITY\n═══════════════════════════════════════\n\nYou are the official AI sales assistant for Baelario — a premium sporty elegant fashion brand from Bangladesh.\nTagline: \"Confidence meets style\"\nYour job: Welcome customers, show products, collect order details step by step, confirm orders, and return structured order data when complete.\n\n═══════════════════════════════════════\nLANGUAGE RULES\n═══════════════════════════════════════\n\n- All customer-facing messages must be written in Bengali script (বাংলা).\n- Rules and instructions in this prompt are in English so the AI understands correctly.\n- Customer may write in Bangla, English, or mixed — always reply in Bengali script no matter what.\n- Never reply in English to the customer.\n- Never reply in Banglish (Bengali meaning in English letters).\n- Always use বাংলা হরফ in every single customer message.\n\n═══════════════════════════════════════\nTONE & PERSONALITY RULES\n═══════════════════════════════════════\n\n- Be warm, friendly, and respectful like a helpful elder sibling.\n- Always use আপনি — never তুমি.\n- Use emojis naturally but not excessively — 🎽 🔥 ✅ 😊 🚚 ⭐\n- Never be pushy or salesy — be genuinely helpful.\n- If customer is rude, stay calm and polite always.\n- Always end messages with a question or call to action.\n- Use customer name whenever possible to feel personal.\n\n═══════════════════════════════════════\nPRODUCT LIST — 2026 JERSEY COLLECTION\n═══════════════════════════════════════\n\n1. Full Sleeve Jersey\n   Size: S, M, L, XL, XXL\n   Price: 850 taka\n\n2. Half Sleeve Jersey\n   Size: S, M, L, XL, XXL\n   Price: 750 taka\n\nDelivery Charge: 60 taka (Dhaka), 120 taka (Outside Dhaka)\nDelivery Time: 4-5 business days\nPayment Methods: bKash 01XXXXXXXXX, Nagad 01XXXXXXXXX, Cash on Delivery\nSpecial Offer: 2 or more jerseys = Free delivery\n\n═══════════════════════════════════════\nCONVERSATION FLOW\n═══════════════════════════════════════\n\nSTEP 1 — WARM WELCOME\nWhen a new customer messages for the first time, reply:\n\n\"আসসালামুয়ালাইকুম! 😊 Baelario-তে আপনাকে স্বাগতম!\\nআমরা নিয়ে এসেছি ২০২৬ সালের একদম নতুন জার্সি কালেকশন — প্রিমিয়াম কোয়ালিটি, স্টাইলিশ ডিজাইন! 🎽\\n\\nআমাদের কালেকশন:\\n\\n👕 ফুল স্লিভ জার্সি — ৮৫০ টাকা\\n👕 হাফ স্লিভ জার্সি — ৭৫০ টাকা\\nসাইজ: S / M / L / XL / XXL\\n\\nডেলিভারি মাত্র ৪-৫ দিনের মধ্যে আপনার দরজায়! 🚚\\nআপনার কোন জার্সিটা পছন্দ হয়েছে?\"\n\nSTEP 2 — ANSWER QUESTIONS\nAnswer any product question warmly.\n\nIf customer asks for photo reply:\n\"অবশ্যই! এখনই পাঠাচ্ছি আপনার জন্য 📸\"\n\nIf customer asks size guide reply:\n\"আমাদের সাইজ গাইড:\\nS — ছোট গড়নের জন্য\\nM — মাঝারি গড়নের জন্য\\nL — একটু বড় গড়নের জন্য\\nXL — বড় গড়নের জন্য\\nXXL — অতিরিক্ত বড় গড়নের জন্য\\nআপনি সাধারণত কোন সাইজ পরেন?\"\n\nSTEP 3 — ORDER COLLECTION\nWhen customer shows interest in ordering, collect details ONE BY ONE. Never ask multiple questions at once.\n\nQuestion 1 — Name:\n\"দারুণ পছন্দ! 🎽 অর্ডার করতে প্রথমে আপনার পুরো নামটা জানাবেন?\"\n\nQuestion 2 — Phone Number:\n\"ধন্যবাদ! এখন আপনার একটা সচল ফোন নম্বর দিন — ডেলিভারির সময় যোগাযোগের জন্য লাগবে।\"\n\nQuestion 3 — Full Address:\n\"আপনার পূর্ণ ঠিকানাটা বলুন — বাড়ি নম্বর, রোড, থানা, উপজেলা এবং জেলাসহ।\"\n\nQuestion 4 — Jersey Type:\n\"আপনি কি ফুল স্লিভ নেবেন নাকি হাফ স্লিভ? 🎽\"\n\nQuestion 5 — Size:\n\"আপনার সাইজ কত — S, M, L, XL নাকি XXL?\"\n\nQuestion 6 — Quantity:\n\"কয়টা জার্সি নেবেন?\"\n\nQuestion 7 — Custom Print:\n\"জার্সিতে কি কোনো নাম বা নম্বর প্রিন্ট করতে চান? চাইলে জানান, না চাইলে 'না' লিখুন।\"\n\nQuestion 8 — Payment Method:\n\"পেমেন্ট কীভাবে করবেন — bKash, Nagad নাকি Cash on Delivery?\"\n\nSTEP 4 — ORDER SUMMARY & CONFIRMATION\nAfter all 8 details collected, show summary:\n\n\"আপনার অর্ডারের বিস্তারিত একবার দেখে নিন —\\n\\n👤 নাম: [name]\\n📞 ফোন: [phone]\\n📍 ঠিকানা: [address]\\n🎽 জার্সি: [type] — সাইজ [size]\\n🔢 পরিমাণ: [qty]টা\\n✏️ কাস্টম প্রিন্ট: [yes/no + details]\\n💳 পেমেন্ট: [method]\\n💰 মোট দাম: [total] টাকা\\n🚚 ডেলিভারি: ৪-৫ কার্যদিবস\\n\\nসব ঠিক আছে? কনফার্ম করতে 'কনফার্ম' লিখুন! ✅\"\n\nSTEP 5 — ORDER CONFIRMED\nWhen customer says কনফার্ম or ঠিক আছে or হ্যাঁ or yes or ok:\n\nReply:\n\"🎉 আপনার অর্ডার সফলভাবে কনফার্ম হয়ে গেছে!\\n\\nআপনার জার্সি ৪-৫ দিনের মধ্যে পৌঁছে যাবে। 🚚\\nযেকোনো প্রয়োজনে আমাদের মেসেজ করুন।\\nBaelario — Confidence meets style! 🏆\"\n\nAND include at the end of your response a JSON block in this exact format (this is for internal processing only, do not show it to the customer in a visible way, append it after your reply wrapped in <ORDER_DATA> tags):\n<ORDER_DATA>\n{\n  \"order_confirmed\": true,\n  \"customer_name\": \"\",\n  \"phone\": \"\",\n  \"address\": \"\",\n  \"district\": \"\",\n  \"jersey_type\": \"\",\n  \"size\": \"\",\n  \"quantity\": 0,\n  \"custom_print\": \"\",\n  \"payment_method\": \"\",\n  \"total_price\": 0,\n  \"special_notes\": \"\"\n}\n</ORDER_DATA>\n\n═══════════════════════════════════════\nFAQ AUTO REPLIES\n═══════════════════════════════════════\n\nDelivery time question:\n\"আপনার অর্ডার ৪-৫ কার্যদিবসের মধ্যে আপনার দরজায় পৌঁছে যাবে! 🚚\"\n\nDelivery charge question:\n\"ঢাকার ভেতরে ডেলিভারি চার্জ ৬০ টাকা। ঢাকার বাইরে ১২০ টাকা।\"\n\nReturn or exchange question:\n\"জার্সিতে কোনো সমস্যা থাকলে আমরা অবশ্যই এক্সচেঞ্জ করবো। ৭ দিনের মধ্যে জানাবেন।\"\n\nCustomer says will think about it:\n\"কোনো সমস্যা নেই! যখন রেডি হবেন, শুধু একটা মেসেজ করুন — বাকিটা আমরা করবো! 😊\"\n\n═══════════════════════════════════════\nREMINDER MESSAGES\n═══════════════════════════════════════\n\nIf customer is silent for 1 hour during order:\n\"এই যে! আপনার অর্ডারটা কি কমপ্লিট করবো? কোনো প্রশ্ন থাকলে নির্দ্বিধায় জিজ্ঞেস করুন 😊\"\n\nIf customer is silent for 24 hours:\n\"আসসালামুয়ালাইকুম! Baelario-র নতুন কালেকশনে আপনার জন্য স্পেশাল অফার আছে — এখনও কি আগ্রহী? 🎽\"\n\n═══════════════════════════════════════\nSTOCK & OFFER RULES\n═══════════════════════════════════════\n\n- If a size is out of stock, apologize and suggest nearest available size.\n- If customer orders 2 or more jerseys, mention free delivery offer.\n- Always mention current offers naturally in conversation."
+            },
+            {
+              "role": "user",
+              "content": "=={{ 'Previous conversation history:\\n' + ($json.sessionData ? JSON.parse($json.sessionData).history.map(h => h.role + ': ' + h.content).join('\\n') : 'No previous history') + '\\n\\nCurrent customer message: ' + $json.messageText + '\\nCustomer name: ' + $json.senderName + '\\nChannel: ' + $json.channel }}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 1000
+        }
+      },
+      "id": "node-ai-agent",
+      "name": "Baelario AI Agent (GPT-4o)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1,
+      "position": [700, 200],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI"
+        }
       }
     },
     {
-      "id": "4",
-      "name": "Extract Intent",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 2,
-      "position": [750, 300],
       "parameters": {
-        "values": {
-          "string": [
+        "mode": "runOnceForEachItem",
+        "jsCode": "const aiReply = $input.item.json.message?.content || '';\n\n// Extract ORDER_DATA if present\nlet orderData = null;\nlet cleanReply = aiReply;\n\nconst orderMatch = aiReply.match(/<ORDER_DATA>([\\s\\S]*?)<\\/ORDER_DATA>/);\nif (orderMatch) {\n  try {\n    orderData = JSON.parse(orderMatch[1].trim());\n    cleanReply = aiReply.replace(/<ORDER_DATA>[\\s\\S]*?<\\/ORDER_DATA>/, '').trim();\n  } catch (e) {\n    orderData = null;\n  }\n}\n\n// Generate order number if confirmed\nlet orderNumber = '';\nif (orderData && orderData.order_confirmed) {\n  const now = new Date();\n  orderNumber = 'BAE-' + now.getFullYear() + \n    String(now.getMonth()+1).padStart(2,'0') + \n    String(now.getDate()).padStart(2,'0') + '-' + \n    Math.floor(Math.random() * 9000 + 1000);\n  orderData.order_number = orderNumber;\n  orderData.order_date = now.toISOString();\n  cleanReply = cleanReply.replace('[AUTO GENERATED]', orderNumber);\n}\n\nreturn {\n  json: {\n    ...$input.item.json,\n    aiReply: cleanReply,\n    orderData: orderData,\n    orderConfirmed: orderData ? orderData.order_confirmed : false,\n    orderNumber\n  }\n};"
+      },
+      "id": "node-parse-reply",
+      "name": "Parse AI Reply & Extract Order",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Update session history in Redis\nconst sessionKey = 'session_' + $input.item.json.senderId;\nconst existingSession = $input.item.json.sessionData \n  ? JSON.parse($input.item.json.sessionData) \n  : { history: [] };\n\nexistingSession.history.push(\n  { role: 'user', content: $input.item.json.messageText },\n  { role: 'assistant', content: $input.item.json.aiReply }\n);\n\n// Keep only last 20 messages to avoid token overflow\nif (existingSession.history.length > 20) {\n  existingSession.history = existingSession.history.slice(-20);\n}\n\nif ($input.item.json.orderConfirmed) {\n  existingSession.orderConfirmed = true;\n  existingSession.orderData = $input.item.json.orderData;\n}\n\nreturn {\n  json: {\n    ...$input.item.json,\n    sessionKey,\n    updatedSession: JSON.stringify(existingSession)\n  }\n};"
+      },
+      "id": "node-update-session",
+      "name": "Update Session History",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 200]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "={{ $json.sessionKey }}",
+        "value": "={{ $json.updatedSession }}",
+        "keyExpiryTimeUnit": "hours",
+        "expire": true,
+        "ttl": 72
+      },
+      "id": "node-save-session",
+      "name": "Save Session to Redis",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [1300, 200],
+      "credentials": {
+        "redis": {
+          "id": "redis-credentials",
+          "name": "Redis"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
             {
-              "name": "intent",
-              "value": "={{$json[\"choices\"][0][\"message\"][\"content\"]}}"
+              "value1": "={{ $json.orderConfirmed }}",
+              "value2": true
             }
           ]
         }
+      },
+      "id": "node-check-order",
+      "name": "Is Order Confirmed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1500, 200]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "resource": "sheet",
+        "operation": "appendOrUpdate",
+        "spreadsheetId": "YOUR_GOOGLE_SHEET_ID_HERE",
+        "sheetName": "Orders",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Order Date & Time": "={{ $json.orderData.order_date }}",
+            "Order Number": "={{ $json.orderData.order_number }}",
+            "Customer Name": "={{ $json.orderData.customer_name }}",
+            "Phone Number": "={{ $json.orderData.phone }}",
+            "Full Address": "={{ $json.orderData.address }}",
+            "District": "={{ $json.orderData.district }}",
+            "Jersey Type": "={{ $json.orderData.jersey_type }}",
+            "Size": "={{ $json.orderData.size }}",
+            "Quantity": "={{ $json.orderData.quantity }}",
+            "Custom Print Details": "={{ $json.orderData.custom_print }}",
+            "Total Price (BDT)": "={{ $json.orderData.total_price }}",
+            "Payment Method": "={{ $json.orderData.payment_method }}",
+            "Order Status": "Pending",
+            "Channel": "={{ $json.channel }}",
+            "Special Notes": "={{ $json.orderData.special_notes }}",
+            "Delivery Status": "Processing"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-google-sheet",
+      "name": "Log Order to Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1700, 100],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets"
+        }
       }
     },
     {
-      "id": "5",
-      "name": "Router",
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "https://api.telegram.org/bot YOUR_TELEGRAM_BOT_TOKEN/sendMessage",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "YOUR_TELEGRAM_CHAT_ID"
+            },
+            {
+              "name": "text",
+              "value": "=🔔 New Order Alert! — Baelario\n\n📦 Order No: {{ $json.orderData.order_number }}\n👤 Customer: {{ $json.orderData.customer_name }}\n📞 Phone: {{ $json.orderData.phone }}\n📍 Address: {{ $json.orderData.address }}\n🎽 Jersey: {{ $json.orderData.jersey_type }} — Size {{ $json.orderData.size }} x {{ $json.orderData.quantity }}pcs\n✏️ Custom Print: {{ $json.orderData.custom_print }}\n💳 Payment: {{ $json.orderData.payment_method }}\n💰 Total: {{ $json.orderData.total_price }} Taka\n📱 Channel: {{ $json.channel }}\n\n✅ Google Sheet e details save hoyeche!"
+            },
+            {
+              "name": "parse_mode",
+              "value": "HTML"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-owner-notify",
+      "name": "Notify Owner via Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1700, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.channel }}",
+              "operation": "equals",
+              "value2": "Facebook"
+            }
+          ]
+        }
+      },
+      "id": "node-channel-check",
+      "name": "Which Channel?",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 1,
-      "position": [900, 300],
-      "parameters": {
-        "value1": "={{$json[\"intent\"]}}",
-        "rules": [
-          { "operation": "contains", "value2": "place_order" },
-          { "operation": "contains", "value2": "track_order" },
-          { "operation": "contains", "value2": "payment" }
-        ]
-      }
+      "position": [1900, 200]
     },
     {
-      "id": "6",
-      "name": "Save Order",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4,
-      "position": [1100, 150],
       "parameters": {
-        "operation": "append",
-        "sheetId": "YOUR_SHEET_ID",
-        "range": "Orders!A:L"
-      }
-    },
-    {
-      "id": "7",
-      "name": "Track Order",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4,
-      "position": [1100, 300],
-      "parameters": {
-        "operation": "lookup",
-        "sheetId": "YOUR_SHEET_ID",
-        "range": "Orders!A:L",
-        "lookupColumn": "Order ID",
-        "lookupValue": "={{$json[\"message\"]}}"
-      }
-    },
-    {
-      "id": "8",
-      "name": "Payment Handler",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 2,
-      "position": [1100, 450],
-      "parameters": {
-        "values": {
-          "string": [
+        "url": "=https://graph.facebook.com/v18.0/me/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookPageApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
             {
-              "name": "payment_status",
-              "value": "Paid - Pending Verification"
+              "name": "access_token",
+              "value": "YOUR_FACEBOOK_PAGE_ACCESS_TOKEN"
             }
           ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "recipient": {
+            "id": "={{ $json.senderId }}"
+          },
+          "message": {
+            "text": "={{ $json.aiReply }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-send-facebook",
+      "name": "Send Reply via Facebook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2100, 0]
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v18.0/me/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookPageApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": "YOUR_INSTAGRAM_PAGE_ACCESS_TOKEN"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "recipient": {
+            "id": "={{ $json.senderId }}"
+          },
+          "message": {
+            "text": "={{ $json.aiReply }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-send-instagram",
+      "name": "Send Reply via Instagram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2100, 200]
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v18.0/YOUR_WHATSAPP_PHONE_NUMBER_ID/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_WHATSAPP_ACCESS_TOKEN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "messaging_product": "whatsapp",
+          "to": "={{ $json.senderId }}",
+          "type": "text",
+          "text": {
+            "body": "={{ $json.aiReply }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-send-whatsapp",
+      "name": "Send Reply via WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2100, 400]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "node-reminder-trigger",
+      "name": "Reminder Check (Every Hour)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [0, 700]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// This node would scan Redis for inactive sessions\n// and send reminder messages\n// Implementation depends on your Redis setup\n// Placeholder logic shown below\n\nconst reminders = [];\n// In production: scan all session_* keys from Redis\n// Check last message timestamp\n// If > 1 hour and order not complete: send 1hr reminder\n// If > 24 hours and order not complete: send 24hr reminder\n\nreturn reminders.map(r => ({ json: r }));"
+      },
+      "id": "node-check-reminders",
+      "name": "Check Inactive Sessions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [300, 700]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 10
+            }
+          ]
+        }
+      },
+      "id": "node-delivery-followup-trigger",
+      "name": "After Delivery Follow-up (Daily at 10AM)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [0, 900]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "resource": "sheet",
+        "operation": "read",
+        "spreadsheetId": "YOUR_GOOGLE_SHEET_ID_HERE",
+        "sheetName": "Orders",
+        "options": {
+          "returnAllMatches": true
+        }
+      },
+      "id": "node-read-sheet-followup",
+      "name": "Read Orders for Follow-up",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [300, 900],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-credentials",
+          "name": "Google Sheets"
         }
       }
     },
     {
-      "id": "9",
-      "name": "Send Reply",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [1300, 300],
       "parameters": {
-        "requestMethod": "POST",
-        "url": "https://graph.facebook.com/v18.0/me/messages",
-        "jsonParameters": true,
-        "bodyParametersJson": "={\n  \"recipient\": {\"id\": \"{{$json[\"user_id\"]}}\"},\n  \"message\": {\"text\": \"{{$json[\"message\"]}}\"}\n}"
-      }
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Check if order is 4-5 days old and followup not sent\nconst order = $input.item.json;\nconst orderDate = new Date(order['Order Date & Time']);\nconst now = new Date();\nconst daysDiff = (now - orderDate) / (1000 * 60 * 60 * 24);\n\nif (daysDiff >= 4 && daysDiff <= 5 && order['Delivery Status'] === 'Processing' && !order['Followup Sent']) {\n  return {\n    json: {\n      ...order,\n      shouldSendFollowup: true,\n      followupMessage: `আসসালামুয়ালাইকুম ${order['Customer Name']} ভাই/আপু! 😊\\nআপনার Baelario জার্সি কি পৌঁছে গেছে?\\nপরে কেমন লাগলো জানাবেন — আপনার মতামত আমাদের জন্য অনেক গুরুত্বপূর্ণ! ⭐\\nভালো লাগলে আমাদের পেজে একটা রিভিউ দিলে খুশি হবো!`\n    }\n  };\n}\n\nreturn { json: { ...order, shouldSendFollowup: false } };"
+      },
+      "id": "node-filter-followup",
+      "name": "Filter Orders Needing Follow-up",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 900]
     }
   ],
   "connections": {
-    "WA Trigger": {
-      "main": [[{ "node": "Normalize", "type": "main", "index": 0 }]]
+    "Facebook Messenger Trigger": {
+      "main": [[{ "node": "Normalize Message Input", "type": "main", "index": 0 }]]
     },
-    "Normalize": {
-      "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]]
+    "Instagram DM Trigger": {
+      "main": [[{ "node": "Normalize Message Input", "type": "main", "index": 0 }]]
     },
-    "AI Agent": {
-      "main": [[{ "node": "Extract Intent", "type": "main", "index": 0 }]]
+    "WhatsApp Trigger": {
+      "main": [[{ "node": "Normalize Message Input", "type": "main", "index": 0 }]]
     },
-    "Extract Intent": {
-      "main": [[{ "node": "Router", "type": "main", "index": 0 }]]
+    "Normalize Message Input": {
+      "main": [[{ "node": "Get Customer Session", "type": "main", "index": 0 }]]
     },
-    "Router": {
+    "Get Customer Session": {
+      "main": [[{ "node": "Baelario AI Agent (GPT-4o)", "type": "main", "index": 0 }]]
+    },
+    "Baelario AI Agent (GPT-4o)": {
+      "main": [[{ "node": "Parse AI Reply & Extract Order", "type": "main", "index": 0 }]]
+    },
+    "Parse AI Reply & Extract Order": {
+      "main": [[{ "node": "Update Session History", "type": "main", "index": 0 }]]
+    },
+    "Update Session History": {
+      "main": [[{ "node": "Save Session to Redis", "type": "main", "index": 0 }]]
+    },
+    "Save Session to Redis": {
+      "main": [[{ "node": "Is Order Confirmed?", "type": "main", "index": 0 }]]
+    },
+    "Is Order Confirmed?": {
       "main": [
-        [{ "node": "Save Order", "type": "main", "index": 0 }],
-        [{ "node": "Track Order", "type": "main", "index": 0 }],
-        [{ "node": "Payment Handler", "type": "main", "index": 0 }]
+        [
+          { "node": "Log Order to Google Sheet", "type": "main", "index": 0 },
+          { "node": "Notify Owner via Telegram", "type": "main", "index": 0 },
+          { "node": "Which Channel?", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Which Channel?", "type": "main", "index": 0 }
+        ]
       ]
     },
-    "Save Order": {
-      "main": [[{ "node": "Send Reply", "type": "main", "index": 0 }]]
+    "Which Channel?": {
+      "main": [
+        [{ "node": "Send Reply via Facebook", "type": "main", "index": 0 }],
+        [{ "node": "Send Reply via Instagram", "type": "main", "index": 0 }],
+        [{ "node": "Send Reply via WhatsApp", "type": "main", "index": 0 }]
+      ]
     },
-    "Track Order": {
-      "main": [[{ "node": "Send Reply", "type": "main", "index": 0 }]]
+    "Reminder Check (Every Hour)": {
+      "main": [[{ "node": "Check Inactive Sessions", "type": "main", "index": 0 }]]
     },
-    "Payment Handler": {
-      "main": [[{ "node": "Send Reply", "type": "main", "index": 0 }]]
+    "After Delivery Follow-up (Daily at 10AM)": {
+      "main": [[{ "node": "Read Orders for Follow-up", "type": "main", "index": 0 }]]
+    },
+    "Read Orders for Follow-up": {
+      "main": [[{ "node": "Filter Orders Needing Follow-up", "type": "main", "index": 0 }]]
     }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": ["baelario", "ai-agent", "ecommerce", "bangladesh"],
+  "meta": {
+    "description": "Baelario AI Sales Agent — handles Facebook, Instagram, WhatsApp messages, collects orders, logs to Google Sheet, notifies owner via Telegram.",
+    "version": "1.0.0",
+    "author": "Baelario"
+  },
+  "_SETUP_INSTRUCTIONS": {
+    "STEP_1_CREDENTIALS": [
+      "OpenAI API Key — for GPT-4o AI responses",
+      "Google Sheets OAuth2 — for order logging",
+      "Redis — for session/conversation memory",
+      "Facebook Page Access Token — for Messenger replies",
+      "Instagram Page Access Token — for Instagram DM replies",
+      "WhatsApp Business API Token + Phone Number ID — for WhatsApp replies",
+      "Telegram Bot Token + Chat ID — for owner notifications"
+    ],
+    "STEP_2_REPLACE_PLACEHOLDERS": [
+      "YOUR_GOOGLE_SHEET_ID_HERE — your Google Sheet ID from the URL",
+      "YOUR_FACEBOOK_PAGE_ACCESS_TOKEN — from Meta Developer Dashboard",
+      "YOUR_INSTAGRAM_PAGE_ACCESS_TOKEN — from Meta Developer Dashboard",
+      "YOUR_WHATSAPP_PHONE_NUMBER_ID — from Meta WhatsApp Business API",
+      "YOUR_WHATSAPP_ACCESS_TOKEN — from Meta Developer Dashboard",
+      "YOUR_TELEGRAM_BOT_TOKEN — from @BotFather on Telegram",
+      "YOUR_TELEGRAM_CHAT_ID — your personal Telegram chat ID"
+    ],
+    "STEP_3_GOOGLE_SHEET_COLUMNS": [
+      "Order Date & Time",
+      "Order Number",
+      "Customer Name",
+      "Phone Number",
+      "Full Address",
+      "District",
+      "Jersey Type",
+      "Size",
+      "Quantity",
+      "Custom Print Details",
+      "Total Price (BDT)",
+      "Payment Method",
+      "Order Status",
+      "Channel",
+      "Special Notes",
+      "Delivery Status",
+      "Followup Sent"
+    ],
+    "STEP_4_PRICES_TO_UPDATE": [
+      "Full Sleeve Jersey price — currently set to 850 taka",
+      "Half Sleeve Jersey price — currently set to 750 taka",
+      "Delivery charge Dhaka — currently set to 60 taka",
+      "Delivery charge Outside Dhaka — currently set to 120 taka",
+      "bKash number — replace 01XXXXXXXXX",
+      "Nagad number — replace 01XXXXXXXXX"
+    ],
+    "STEP_5_WEBHOOK_SETUP": [
+      "Facebook: Set webhook URL to https://your-n8n-domain/webhook/facebook-webhook",
+      "Instagram: Set webhook URL to https://your-n8n-domain/webhook/instagram-webhook",
+      "WhatsApp: Set webhook URL to https://your-n8n-domain/webhook/whatsapp-webhook",
+      "Subscribe to 'messages' event in Meta Developer Dashboard for all three"
+    ]
   }
 }
