@@ -1,3 +1,0 @@
-Extract order details:
-Team, Size, Quantity, Address, Payment method
-Return JSON only.
