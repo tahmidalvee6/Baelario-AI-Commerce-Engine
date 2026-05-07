@@ -1,6 +1,6 @@
-# 🛍️ Baelario-AI-Commerce-Engine
+# 🛍️ AI-Commerce-Engine
 
-> **AI-powered omnichannel commerce bot for Baelario** — an intelligent sales agent that handles jersey browsing, order taking, payment detection, and order tracking across WhatsApp, Instagram DM, Facebook Messenger, and Website Chat — all automated with n8n.
+> **AI-powered omnichannel commerce bot** — an intelligent sales agent that handles jersey browsing, order taking, payment detection, and order tracking across WhatsApp, Instagram DM, Facebook Messenger, and Website Chat — all automated with n8n.
 
 ---
 
